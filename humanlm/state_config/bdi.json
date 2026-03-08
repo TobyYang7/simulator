@@ -1,0 +1,26 @@
+{
+    "belief": {
+        "desc": "HUMAN's belief (must be within 15 words): the underlying fact model, causal assumption, or worldview they seem to hold in this situation. Belief should describe what HUMAN thinks is true or likely true about the people, event, or world. Prefer stable assumptions over surface paraphrases.",
+        "threshold": 0.9,
+        "max_tokens": 48,
+        "system_prompt": "../system_prompts/bdi_belief.txt"
+    },
+    "desire": {
+        "desc": "HUMAN's desire (must be within 15 words): the outcome, need, or value-backed objective they want to realize or protect in this interaction. Desire is about what HUMAN wants to happen, preserve, avoid, or optimize.",
+        "threshold": 0.9,
+        "max_tokens": 48,
+        "system_prompt": "../system_prompts/bdi_desire.txt"
+    },
+    "intention": {
+        "desc": "HUMAN's intention (must be within 15 words): the immediate communicative move HUMAN is choosing right now, such as persuading, comforting, rejecting, defending, asking, mocking, or clarifying. Intention is the action plan for this reply, not the long-term desire.",
+        "threshold": 0.9,
+        "max_tokens": 48,
+        "system_prompt": "../system_prompts/bdi_intention.txt"
+    },
+    "response": {
+        "desc": "HUMAN's actual written comment or reply text.",
+        "threshold": null,
+        "max_tokens": 512,
+        "system_prompt": "../system_prompts/bdi_response.txt"
+    }
+}

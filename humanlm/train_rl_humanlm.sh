@@ -15,7 +15,7 @@ set +a
 # ARGUMENTS
 GPU_LIST=${1:?"Error: GPU list required (e.g., '0,1,2,3')"}
 DATASET_NAME=${2:?"Error: Dataset name required (reddit|medium|youtube|amazon|wildchat|enron)"}
-RUN_MODE=${3:?"Error: mode required (eval_only|train_humanlm)"}
+RUN_MODE=${3:?"Error: mode required (eval_only|train_humanlm|train_bdi_humanlm)"}
 
 RESUME_PATH=${4:-""}   
 MODEL_TYPE=${5:-base}
@@ -49,6 +49,7 @@ ENABLE_STATE=False
 IDENTIFIER=""
 CONFIG=""
 STATE_CONFIG=""
+AUX_TARGETS_PATH="${AUX_TARGETS_PATH:-}"
 export VLLM_USE_V1=1
 
 case "$RUN_MODE" in
@@ -99,9 +100,22 @@ case "$RUN_MODE" in
     ENABLE_STATE=False
     STATE_CONFIG="./recipe/humanlm/state_config/sebvgcr.json"
     ;;
+
+  train_bdi_humanlm)
+    CONFIG="bdi"
+    IDENTIFIER="humanlm_bdi_grpo"
+    ENABLE_THINKING=True
+    ENABLE_HETERO_THINK=True
+    MAX_GEN_LENGTH=1024
+    SEPARATE_GENERATION=True
+    USE_DIFF_H_SYS_PROMPTS=True
+    ENABLE_STATE=False
+    STATE_CONFIG="./recipe/humanlm/state_config/bdi.json"
+    VAL_METRICS='{response:{state_reward_on_response:{weight:1.0,kwargs:{model:"anthropic/claude-haiku-4-5",temperature:0,config_path:"./recipe/humanlm/state_config/bdi_slots.json"}},state_reward:{weight:1.0,kwargs:{model:"anthropic/claude-haiku-4-5",temperature:0}}}}'
+    ;;
     
   *)
-    echo "Error: Invalid mode '$RUN_MODE'. Use eval_only|train_humanlm" >&2
+    echo "Error: Invalid mode '$RUN_MODE'. Use eval_only|train_humanlm|train_bdi_humanlm" >&2
     exit 1
     ;;
 esac
@@ -153,6 +167,7 @@ Batch Size:           $BATCH_SIZE
 Data Path:            $DATA_PATH
 Experiment Name:      $EXP_NAME
 Resume Path:          $RESUME_PATH
+AUX Targets Path:     ${AUX_TARGETS_PATH:-<none>}
 Training Epochs:      $TRAIN_EPOCHS
 ================================================================================
 EOF
@@ -198,6 +213,7 @@ python3 -m verl.trainer.main_ppo \
     data.truncation='error' \
     data.filter_overlong_prompts_workers=128 \
     +data.state_config_path=$STATE_CONFIG \
+    +data.aux_targets_path="$AUX_TARGETS_PATH" \
     +data.enable_hetero_think=$ENABLE_HETERO_THINK \
     +data.augment_with_states=$USE_DIFF_H_SYS_PROMPTS \
     +data.val_size=$VAL_SIZE \

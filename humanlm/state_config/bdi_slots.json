@@ -1,0 +1,20 @@
+{
+    "belief": {
+        "desc": "HUMAN's belief: the underlying fact model, causal assumption, or worldview implied by the reply.",
+        "threshold": 0.9,
+        "max_tokens": 48,
+        "system_prompt": "../system_prompts/bdi_belief.txt"
+    },
+    "desire": {
+        "desc": "HUMAN's desire: the outcome, need, or value-backed objective the reply is trying to realize or protect.",
+        "threshold": 0.9,
+        "max_tokens": 48,
+        "system_prompt": "../system_prompts/bdi_desire.txt"
+    },
+    "intention": {
+        "desc": "HUMAN's intention: the immediate communicative move chosen in this reply, such as persuading, comforting, rejecting, defending, asking, mocking, or clarifying.",
+        "threshold": 0.9,
+        "max_tokens": 48,
+        "system_prompt": "../system_prompts/bdi_intention.txt"
+    }
+}

@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import copy
+import json
 import logging
 import os
 import re
@@ -94,11 +95,15 @@ class StateDataset(RLHFDataset):
         self.val_size = config.get("val_size", 2000)
         self.dataset = config.get("dataset", None)
         self.eval_state_name = config.get("eval_state_name", "response")
+        self.aux_targets_path = config.get("aux_targets_path", None)
+        self.aux_targets_by_index = {}
 
         self.additional_generation_prompt = config.get("additional_generation_prompt", "")
 
         if self.state_config_path and self.augment_with_states:
             self._load_state_system_prompts()
+        if self.aux_targets_path:
+            self._load_aux_targets()
 
         super().__init__(data_files, tokenizer, config, processor)
 
@@ -106,8 +111,6 @@ class StateDataset(RLHFDataset):
     
     def _load_state_system_prompts(self):
         """Load state config and read system prompt files into memory."""
-        import json
-        
         with open(self.state_config_path, 'r') as f:
             state_config = json.load(f)
         
@@ -129,6 +132,54 @@ class StateDataset(RLHFDataset):
                     print(f"Warning: System prompt file not found: {system_prompt_path}")
         print(self.state_system_prompts)
         print(f"Loaded {len(self.state_system_prompts)} state system prompts")
+
+    def _load_aux_targets(self):
+        """Load sidecar pseudo-BDI targets keyed by example index."""
+        path = os.path.expanduser(str(self.aux_targets_path))
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Aux target file not found: {path}")
+
+        with open(path, "r", encoding="utf-8") as handle:
+            for line_no, raw_line in enumerate(handle, start=1):
+                line = raw_line.strip()
+                if not line:
+                    continue
+
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise ValueError(f"Invalid JSON on line {line_no} in {path}: {exc}") from exc
+
+                index = payload.get("index")
+                if index is None:
+                    raise ValueError(f"Missing 'index' on line {line_no} in {path}")
+
+                bdi = payload.get("bdi", {})
+                self.aux_targets_by_index[int(index)] = {
+                    "belief": payload.get("belief", bdi.get("belief", "")),
+                    "desire": payload.get("desire", bdi.get("desire", "")),
+                    "intention": payload.get("intention", bdi.get("intention", "")),
+                }
+
+        print(f"Loaded {len(self.aux_targets_by_index)} auxiliary BDI targets from {path}")
+
+    def _attach_aux_targets(self, row_dict: dict, original_idx: int):
+        """Inject sidecar pseudo-BDI targets into extra_info for future supervision."""
+        if not self.aux_targets_by_index:
+            return
+
+        aux_targets = self.aux_targets_by_index.get(int(original_idx))
+        if aux_targets is None:
+            return
+
+        if "extra_info" not in row_dict or row_dict["extra_info"] is None:
+            row_dict["extra_info"] = {}
+        elif not isinstance(row_dict["extra_info"], dict):
+            row_dict["extra_info"] = {}
+
+        row_dict["extra_info"]["pseudo_belief"] = aux_targets.get("belief", "")
+        row_dict["extra_info"]["pseudo_desire"] = aux_targets.get("desire", "")
+        row_dict["extra_info"]["pseudo_intention"] = aux_targets.get("intention", "")
 
     def _load_single_state_prompt(self, system_prompt_path):
         import json
@@ -351,7 +402,8 @@ class StateDataset(RLHFDataset):
             original_idx = item
             state_name = None
         
-        row_dict: dict = self.dataframe[original_idx] 
+        row_dict: dict = self.dataframe[original_idx]
+        self._attach_aux_targets(row_dict, original_idx)
         messages = self._build_messages(row_dict)
         model_inputs = {}
 
