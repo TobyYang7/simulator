@@ -11,12 +11,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import os
+import sys
 from pathlib import Path
 from typing import Any
 
-import datasets
-import litellm
+ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = ROOT.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from humanlm.utils import extract_json, parse_messages
 
@@ -71,19 +73,24 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_dataset_rows(path: str) -> list[dict[str, Any]]:
+    import pyarrow.parquet as pq
+
     input_path = Path(path)
     if input_path.is_dir():
-        parquet_files = sorted(str(p) for p in input_path.glob("*.parquet"))
+        parquet_files = sorted(input_path.glob("*.parquet"))
         if not parquet_files:
             raise FileNotFoundError(f"No parquet files found in {input_path}")
-        dset = datasets.load_dataset("parquet", data_files=parquet_files, split="train")
+        rows: list[dict[str, Any]] = []
+        for parquet_file in parquet_files:
+            rows.extend(pq.read_table(parquet_file).to_pylist())
+        return rows
     elif input_path.suffix == ".parquet":
-        dset = datasets.load_dataset("parquet", data_files=str(input_path), split="train")
+        return pq.read_table(input_path).to_pylist()
     elif input_path.suffix in {".json", ".jsonl"}:
-        dset = datasets.load_dataset("json", data_files=str(input_path), split="train")
+        with input_path.open("r", encoding="utf-8") as handle:
+            return [json.loads(line) for line in handle if line.strip()]
     else:
         raise ValueError(f"Unsupported input path: {path}")
-    return list(dset)
 
 
 def safe_json_loads(value: Any, default: Any) -> Any:
@@ -147,6 +154,8 @@ def get_response(row: dict[str, Any]) -> str:
 
 
 async def label_one(row: dict[str, Any], teacher_model: str, temperature: float, max_tokens: int) -> dict[str, str]:
+    import litellm
+
     prompt = BDI_PROMPT.format(
         persona=get_persona(row),
         context=get_context(row),

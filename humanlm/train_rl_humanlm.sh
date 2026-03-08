@@ -12,6 +12,8 @@ set -a
 source "$ENV_FILE"
 set +a
 
+MODEL_PATH="${MODEL_PATH_OVERRIDE:-$MODEL_PATH}"
+
 # ARGUMENTS
 GPU_LIST=${1:?"Error: GPU list required (e.g., '0,1,2,3')"}
 DATASET_NAME=${2:?"Error: Dataset name required (reddit|medium|youtube|amazon|wildchat|enron)"}

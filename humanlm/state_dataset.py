@@ -91,6 +91,7 @@ class StateDataset(RLHFDataset):
 
         is_train = any(f.endswith("train.parquet") for f in _files)
         self.is_train = is_train
+        self.split_name = self._infer_split_name(_files)
         self.state_names = []
         self.val_size = config.get("val_size", 2000)
         self.dataset = config.get("dataset", None)
@@ -108,6 +109,13 @@ class StateDataset(RLHFDataset):
         super().__init__(data_files, tokenizer, config, processor)
 
         self._original_len = len(self.dataframe)
+
+    def _infer_split_name(self, data_files: list[str]) -> str:
+        for data_file in data_files:
+            basename = os.path.basename(str(data_file))
+            if basename.endswith(".parquet"):
+                return basename[: -len(".parquet")]
+        return "train" if self.is_train else "val"
     
     def _load_state_system_prompts(self):
         """Load state config and read system prompt files into memory."""
@@ -135,7 +143,7 @@ class StateDataset(RLHFDataset):
 
     def _load_aux_targets(self):
         """Load sidecar pseudo-BDI targets keyed by example index."""
-        path = os.path.expanduser(str(self.aux_targets_path))
+        path = self._resolve_aux_targets_path()
         if not os.path.exists(path):
             raise FileNotFoundError(f"Aux target file not found: {path}")
 
@@ -162,6 +170,23 @@ class StateDataset(RLHFDataset):
                 }
 
         print(f"Loaded {len(self.aux_targets_by_index)} auxiliary BDI targets from {path}")
+
+    def _resolve_aux_targets_path(self) -> str:
+        path = os.path.expanduser(str(self.aux_targets_path))
+        if os.path.isdir(path):
+            split_candidates = [self.split_name]
+            if not self.is_train:
+                split_candidates.extend(["val", "test"])
+
+            for split_name in split_candidates:
+                candidate = os.path.join(path, f"{split_name}.jsonl")
+                if os.path.exists(candidate):
+                    return candidate
+
+            raise FileNotFoundError(
+                f"Aux target directory {path} does not contain a matching split JSONL for {self.split_name}"
+            )
+        return path
 
     def _attach_aux_targets(self, row_dict: dict, original_idx: int):
         """Inject sidecar pseudo-BDI targets into extra_info for future supervision."""
